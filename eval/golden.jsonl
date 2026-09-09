@@ -1,0 +1,4 @@
+{"case_id":"FIX-001","complexity":"clean","input":"35=D|49=CLIENT1|56=BARX|11=123","gold_valid":true,"gold_reason":"Valid NewOrderSingle","parse_confidence":0.99}
+{"case_id":"FIX-002","complexity":"clean","input":"35=D|49=CLIENT1|56=BARX","gold_valid":false,"gold_reason":"Missing 11=ClOrdID - MiFID II violation","parse_confidence":0.98}
+{"case_id":"FIX-013","complexity":"medium","input":"35=8|49=BARX|56=CLIENT1|39=8","gold_valid":true,"gold_reason":"ExecutionReport partial fill","parse_confidence":0.85}
+{"case_id":"FIX-021","complexity":"messy","input":"scanned log: 35~D with coffee stain, 11=??","gold_valid":false,"gold_reason":"Unparseable - escalate to human","parse_confidence":0.55}
