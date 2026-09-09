@@ -1,5 +1,5 @@
 ## Architecture: v0.2.0 RAG Eval System
-![RAG Eval](rag_eval_system_flowchart.webp)
+![RAG Eval](fix-onboarding-mcp_v0.2.0_RAG_EVAL.jpg)
 **Hybrid Retrieval (Vector+BM25+RRF) + LLM Gen with RAGAS faithfulness ≥0.8**
 **Stratified Eval Harness (golden set / hallucination / confidence 0.75) → Escalation**
 Live release: v0.2.0-rag-eval (de7975b)
