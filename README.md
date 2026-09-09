@@ -1,4 +1,10 @@
-﻿# FIX Onboarding Validator - MCP Server
+## Architecture: v0.2.0 RAG Eval System
+![RAG Eval](rag_eval_system_flowchart.webp)
+**Hybrid Retrieval (Vector+BM25+RRF) + LLM Gen with RAGAS faithfulness ≥0.8**
+**Stratified Eval Harness (golden set / hallucination / confidence 0.75) → Escalation**
+Live release: v0.2.0-rag-eval (de7975b)
+ 
+# FIX Onboarding Validator - MCP Server
 
 An MCP server for validating FIX protocol onboarding, with a LangGraph agent for automated workflows.
 
