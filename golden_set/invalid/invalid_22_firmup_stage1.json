@@ -1,0 +1,11 @@
+{
+  "id": "invalid_22_firmup_stage1",
+  "input_raw": "8=FIX.4.2^35=D^49=CLIENT_A^56=VENUE_X^11=ORD999^55=TEST.L^54=1^38=1000^40=2^44=10.00^59=0^8002=1",
+  "expected_verdict": "FAIL",
+  "expected_reason": "Invalid 8002=1 FirmUp - Stage1 supports 8002=0 only",
+  "expected_faithfulness": 0.94,
+  "anonymized": true,
+  "venue": "VENUE_X",
+  "client": "CLIENT_A",
+  "pii": false
+}

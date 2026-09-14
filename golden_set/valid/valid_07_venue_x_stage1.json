@@ -1,0 +1,11 @@
+{
+  "id": "valid_07_venue_x_stage1",
+  "input_raw": "8=FIX.4.2^9=178^35=D^49=CLIENT_A^56=VENUE_X^11=ORD0007^1=ACC001^55=TEST.L^48=TEST.L^22=8^54=1^38=1000^40=2^44=10.70^59=0^60=20260101-10:00:00^207=XNAS^8002=0^10=148",
+  "expected_verdict": "PASS",
+  "expected_reason": "VENUE_X Stage1 7.1.1 PASS - all mandatory tags present, 8002=0 Conditional IOI allowed. Case 7",
+  "expected_faithfulness": 0.94,
+  "anonymized": true,
+  "venue": "VENUE_X",
+  "client": "CLIENT_A",
+  "pii": false
+}

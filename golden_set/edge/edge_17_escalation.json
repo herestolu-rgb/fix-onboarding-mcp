@@ -1,0 +1,11 @@
+{
+  "id": "edge_17_escalation",
+  "input_raw": "8=FIX.4.2^35=G^49=CLIENT_A^56=VENUE_X^11=ORD0017_MOD^41=ORD0017^37=EXEC0017^55=DIFF.L^54=1^38=1000^40=2^44=10.00^10=148",
+  "expected_verdict": "ESCALATE",
+  "expected_reason": "EDGE: 55 Symbol mismatch on replace (DIFF vs TEST) - must escalate, confidence 0.68 <0.75. Case 17",
+  "expected_faithfulness": 0.94,
+  "anonymized": true,
+  "venue": "VENUE_X",
+  "client": "CLIENT_A",
+  "pii": false
+}
