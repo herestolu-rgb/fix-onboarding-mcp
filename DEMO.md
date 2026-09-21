@@ -1,37 +1,49 @@
-DEMO — 60 Sec Pocket Demo
-Built for APIDays London — runs on laptop, no cloud needed.
-Setup (first time)
-```bash
-git clone https://github.com/herestolu-rgb/fix-onboarding-mcp.git
-cd fix-onboarding-mcp
-pip install -r requirements.txt
-ollama pull llama3.1:8b
-```
-Run Demo
-```bash
-python langgraph_agent_with_llm.py --fix-log /path/to/your/fix.log
-```
-> Note: a bundled sample FIX log isn't in the repo yet. For now, point `--fix-log` at
-> a FIX log of your own. (TODO before APIDays: add `sample_data/sample_fix.log` so
-> this becomes a true zero-setup one-liner.)
-What You'll See
-FIX log parsed and validated against onboarding rules
-LLM summary (local Llama 3.1) — detects missing tags, sequence gaps
-MCP tool calls logged
-Final report: PASS/FAIL + remediation
-Swap to Claude (planned, not yet live)
-The agent's LLM backend is pluggable via `LLM_PROVIDER`. An Anthropic/Claude
-backend is planned but not yet tested end-to-end — it requires billing setup
-that hasn't been done yet. Once verified, the swap will look like:
-```bash
-export LLM_PROVIDER=anthropic
-export ANTHROPIC_API_KEY=sk-...
-python langgraph_agent_with_llm.py --fix-log /path/to/your/fix.log
-```
-Until that's confirmed working, treat this as a preview of the design, not a
-step to run.
-Pocket Demo Flow (for APIDays)
-Open github.com/herestolu-rgb (pinned repo at top)
-Open terminal, run the setup + run commands above (with your own FIX log)
-Show PASS/FAIL output
-No API keys needed for the local demo.
+# Local Prototype Demo
+
+This demo exercises the current LangGraph + local Ollama prototype.
+
+## Setup
+
+Install the Python dependencies:
+
+    pip install -r requirements.txt
+
+The LLM-enhanced agent currently calls a local Ollama endpoint using the
+`llama3.2` model.
+
+If using the LLM explanation path, install Ollama separately and make that
+model available locally.
+
+## Run
+
+    python langgraph_agent_with_llm.py
+
+The current script uses its built-in sample FIX message.
+
+It does not currently accept a `--fix-log` argument.
+
+## Current Flow
+
+The prototype:
+
+1. parses the built-in FIX message
+2. performs deterministic validation
+3. attempts to obtain a short explanation from local Ollama
+4. falls back to a deterministic explanation if the Ollama call fails
+5. prints the result
+
+The current demo does not demonstrate MCP tool invocation, sequence-gap
+detection, hybrid RAG retrieval, or a multi-provider LLM factory.
+
+## Planned Demo Expansion
+
+Future versions may add:
+
+- FIX log file input
+- MCP-integrated workflow execution
+- richer onboarding workflow orchestration
+- provider abstraction for additional LLM backends
+- contextual FIX/specification retrieval
+
+These are planned capabilities and are not required to run the current
+prototype.

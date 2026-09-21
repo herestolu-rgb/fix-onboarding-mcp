@@ -1,13 +1,26 @@
-from typing import List, Dict
-# Hybrid RAG: BM25 + Qdrant + CrossEncoder reranker
+"""Scaffold for planned FIX specification retrieval.
+
+This module does not currently implement hybrid retrieval, vector search,
+BM25, reranking, LLM generation, or RAGAS evaluation.
+
+It preserves an interface for the planned contextual-validation layer while
+the deterministic FIX validator remains the executable source of validation.
+"""
+
+from typing import Dict, List
+
+
 class FIXSpecRAG:
     def __init__(self):
-        self.spec_docs = ["FIX 4.4 Tags", "MiFID II Reporting Rules"]
+        self.spec_docs = ["FIX specification", "regulatory/onboarding rules"]
 
-    def retrieve(self, fix_msg: str, k=5) -> List[Dict]:
-        # dense + sparse fusion, then rerank
-        return [{"text": "Tag 35=D requires 11=ClOrdID per MiFID II RTS 22", "score": 0.96, "source": "FIX 4.4"}]
+    def retrieve(self, fix_msg: str, k: int = 5) -> List[Dict]:
+        """Placeholder for future FIX-spec retrieval."""
+        return []
 
-    def validate_with_context(self, fix_msg: str, ctx: List[Dict]):
-        # faithfulness check to prevent hallucination
-        return {"faithful": True, "violations": [], "context_precision": 0.94}
+    def validate_with_context(self, fix_msg: str, ctx: List[Dict]) -> Dict:
+        """Placeholder for future context-grounded validation/evaluation."""
+        return {
+            "status": "NOT_IMPLEMENTED",
+            "violations": [],
+        }

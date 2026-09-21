@@ -1,52 +1,111 @@
-## Architecture: v0.2.0 RAG Eval System
-![RAG Eval](fix-onboarding-mcp_v0.2.0_RAG_EVAL.jpg)
-**Hybrid Retrieval (Vector+BM25+RRF) + LLM Gen with RAGAS faithfulness ≥0.8**
-**Stratified Eval Harness (golden set / hallucination / confidence 0.75) → Escalation**
-Live release: v0.2.0-rag-eval (de7975b)
- 
 # FIX Onboarding Validator - MCP Server
 
-An MCP server for validating FIX protocol onboarding, with a LangGraph agent for automated workflows.
+A prototype FIX onboarding validation system combining deterministic FIX
+validation, an MCP interface, LangGraph workflow components, and an executable
+golden-set evaluation harness.
 
-## Features
-- FIX Validator: Validates FIX messages against onboarding rules
-- MCP Server: Exposes validation tools via Model Context Protocol
-- LangGraph Agent: Autonomous agent that orchestrates the onboarding flow
-- LLM-Enhanced Agent: Uses LLMs for intelligent parsing and error explanation
+## Current Implementation
 
-### FOM-4: LangGraph + LLM Integration - BETA v0.9
+### Deterministic FIX validation
 
-Status: Beta complete - running locally, production-ready architecture
+The validator currently supports deterministic validation for selected FIX
+message workflows, including:
 
-Current Implementation (Beta):
-- Model: Llama 3.1:8b via Ollama - local, free, no API key required
-- 4-node LangGraph: detect_and_validate -> explain_with_llm -> report_pass/fail
-- Factory pattern allows provider swapping via LLM_PROVIDER env var
+- NewOrderSingle (`35=D`)
+- ExecutionReport (`35=8`)
+- Cancel/Replace (`35=G`) contextual validation
+- FIX delimiters using SOH, pipe, or caret input
+- explicit PASS / FAIL / ESCALATE verdict semantics
 
-Planned Production (Placeholder - Intentional):
+Venue-specific and regulatory policies are intentionally separated from the
+generic validator where authoritative profile or contextual information is
+required.
 
-    # In get_llm() factory:
-    elif provider == "anthropic":
-        # PLANNED - Testing in progress, requires billing
-        return ChatAnthropic(model="claude-3-5-sonnet-20240620")
+### MCP interface
 
-Why this design:
-- Avoids API costs during dev while proving LLM integration works
-- Extensible - same graph works with Anthropic, OpenAI, local models
-- To switch to production: LLM_PROVIDER=anthropic + ANTHROPIC_API_KEY
+`mcp_server.py` exposes validation functionality through the Model Context
+Protocol while retaining the existing boolean `valid` result and adding an
+explicit `verdict`.
 
-Run Beta:
+### LangGraph
 
-    ollama pull llama3.1:8b
-    python langgraph_agent_with_llm.py
+`langgraph_agent.py` and `langgraph_agent_with_llm.py` provide lightweight
+LangGraph workflow prototypes.
+
+The LLM-enhanced workflow currently attempts a local Ollama request using the
+`llama3.2` model for error explanation. If Ollama is unavailable, it falls back
+to a deterministic explanation.
+
+This is a prototype workflow, not a production-ready multi-provider agent.
+
+### Evaluation
+
+The canonical corpus under `golden_set/` contains 70 cases.
+
+Current executable harness result:
+
+- Discovered: 70
+- Evaluated: 61
+- Out of scope: 9
+- Unsupported: 0
+- Matched: 61
+- Mismatched: 0
+- Unaccounted: 0
+
+Run the harness with:
+
+    python -m eval.harness
+
+Run the unit tests with:
+
+    python -m unittest discover -v
+
+## RAG Status
+
+`rag/fix_spec_rag.py` is currently a scaffold for a future contextual retrieval
+layer.
+
+The repository does not currently implement or measure:
+
+- vector retrieval
+- BM25 or reciprocal-rank fusion (RRF)
+- Qdrant
+- CrossEncoder reranking
+- RAGAS faithfulness
+- retrieval/context precision
+- model confidence thresholds
+- retrieval latency benchmarks
+
+These remain planned architecture rather than current evaluation results.
+
+The existing RAG architecture image is retained as a design artifact and should
+not be interpreted as evidence that all depicted components are implemented.
+
+![RAG design artifact](fix-onboarding-mcp_v0.2.0_RAG_EVAL.jpg)
+
+## Planned Expansion
+
+Future work can introduce an evidence-backed contextual layer for:
+
+- FIX specification retrieval
+- venue-specific onboarding profiles
+- regulatory rule profiles
+- hybrid retrieval and reranking
+- context-grounded explanations
+- measured RAG evaluation
+
+Those capabilities should be added with executable tests and measured
+evaluation rather than placeholder metrics.
 
 ## Project Structure
 
     fix-onboarding-mcp/
+        eval/
+        golden_set/
+        rag/
         fix_validator.py
+        mcp_server.py
         langgraph_agent.py
         langgraph_agent_with_llm.py
-        .env.example
-        README.md
         requirements.txt
-
+        README.md
