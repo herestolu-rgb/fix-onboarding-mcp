@@ -5,6 +5,7 @@ from fix_validator import (
     ValidationResult,
     parse_execution_report,
     parse_fix,
+    validate_cancel_replace,
     validate_new_order_single,
 )
 
@@ -181,7 +182,58 @@ class TestNewOrderSingle(unittest.TestCase):
             any("TAG_52_INVALID" in error for error in r.errors)
         )
 
+class TestCancelReplace(unittest.TestCase):
+    def test_missing_original_order_context_escalates(self):
+        r = validate_cancel_replace(
+            "8=FIX.4.2|35=G|11=ORD1_MOD|41=ORD1|55=DIFF.L"
+        )
 
+        self.assertFalse(r.valid)
+        self.assertEqual(r.verdict, "ESCALATE")
+        self.assertTrue(
+            any("CONTEXT_REQUIRED" in error for error in r.errors)
+        )
+
+    def test_matching_original_symbol_passes(self):
+        r = validate_cancel_replace(
+            "8=FIX.4.2|35=G|11=ORD1_MOD|41=ORD1|55=TEST.L",
+            original_order={"55": "TEST.L"},
+        )
+
+        self.assertTrue(r.valid)
+        self.assertEqual(r.verdict, "PASS")
+
+    def test_symbol_mismatch_fails(self):
+        r = validate_cancel_replace(
+            "8=FIX.4.2|35=G|11=ORD1_MOD|41=ORD1|55=DIFF.L",
+            original_order={"55": "TEST.L"},
+        )
+
+        self.assertFalse(r.valid)
+        self.assertEqual(r.verdict, "FAIL")
+        self.assertTrue(
+            any("TAG_55_MISMATCH" in error for error in r.errors)
+        )
+
+    def test_missing_orig_cl_ord_id_fails(self):
+        r = validate_cancel_replace(
+            "8=FIX.4.2|35=G|11=ORD1_MOD|55=TEST.L"
+        )
+
+        self.assertFalse(r.valid)
+        self.assertEqual(r.verdict, "FAIL")
+        self.assertTrue(
+            any("TAG_41_MISSING" in error for error in r.errors)
+        )
+
+    def test_wrong_msg_type_fails(self):
+        r = validate_cancel_replace(
+            "8=FIX.4.2|35=D|11=ORD1|41=OLD1|55=TEST.L"
+        )
+
+        self.assertFalse(r.valid)
+        self.assertEqual(r.verdict, "FAIL")
+        
 class TestExecutionReport(unittest.TestCase):
     def test_valid_fill(self):
         r = parse_execution_report(

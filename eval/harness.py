@@ -2,11 +2,16 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from fix_validator import parse_fix, validate_new_order_single
+from fix_validator import (
+    parse_fix,
+    validate_cancel_replace,
+    validate_new_order_single,
+)
 
 
 GOLDEN_ROOT = Path("golden_set")
 GOLDEN_REFERENCE_TIME = datetime(2020, 1, 1, 0, 2, 0)
+
 
 def load_cases():
     """Load the canonical golden evaluation corpus."""
@@ -37,9 +42,25 @@ def evaluate():
 
         if msg_type == "D":
             result = validate_new_order_single(
-    raw,
-    reference_time=GOLDEN_REFERENCE_TIME,
-)
+                raw,
+                reference_time=GOLDEN_REFERENCE_TIME,
+            )
+            actual = result.verdict
+
+            if actual == expected:
+                matched += 1
+                status = "MATCH"
+            else:
+                mismatched += 1
+                status = "MISMATCH"
+
+            print(
+                f"{case['id']} "
+                f"expected={expected} actual={actual} status={status}"
+            )
+
+        elif msg_type == "G":
+            result = validate_cancel_replace(raw)
             actual = result.verdict
 
             if actual == expected:

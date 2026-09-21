@@ -18,6 +18,7 @@ TAG_NAMES = {
     "40": "OrdType",
     "44": "Price",
     "11": "ClOrdID",
+    "41": "OrigClOrdID",
     "39": "OrdStatus",
     "150": "ExecType",
     "32": "LastQty",
@@ -208,7 +209,91 @@ def validate_new_order_single(
         parsed=parsed,
     )
 
+def validate_cancel_replace(
+    raw: str,
+    original_order: Optional[dict] = None,
+) -> ValidationResult:
+    """Validate an Order Cancel/Replace Request (35=G).
 
+    Some replacement checks require authoritative state from the original
+    order. If that context is unavailable, return ESCALATE rather than
+    guessing PASS or FAIL.
+    """
+    tags = parse_fix(raw)
+    errors = []
+
+    if tags.get("35") != "G":
+        return ValidationResult(
+            valid=False,
+            msg_type=tags.get("35"),
+            errors=[
+                f"MsgType is '{tags.get('35')}', expected 'G'"
+            ],
+        )
+
+    # Minimal deterministic fields needed for the contextual check.
+    for tag in ["11", "41", "55"]:
+        if tag not in tags:
+            errors.append(
+                f"TAG_{tag}_MISSING: "
+                f"{TAG_NAMES[tag]} is required for Order Cancel/Replace"
+            )
+
+    if errors:
+        return ValidationResult(
+            valid=False,
+            msg_type="G",
+            errors=errors,
+        )
+
+    # The replacement references an original order via OrigClOrdID (41).
+    # Without authoritative original-order state, we cannot determine
+    # whether fields such as Symbol conflict with that order.
+    if original_order is None:
+        return ValidationResult(
+            valid=False,
+            msg_type="G",
+            verdict="ESCALATE",
+            errors=[
+                "CONTEXT_REQUIRED: Original order state is required "
+                "to validate Order Cancel/Replace"
+            ],
+        )
+
+    original_symbol = original_order.get("55")
+    replacement_symbol = tags.get("55")
+
+    if original_symbol is None:
+        return ValidationResult(
+            valid=False,
+            msg_type="G",
+            verdict="ESCALATE",
+            errors=[
+                "CONTEXT_REQUIRED: Original order Symbol (55) "
+                "is unavailable"
+            ],
+        )
+
+    if replacement_symbol != original_symbol:
+        return ValidationResult(
+            valid=False,
+            msg_type="G",
+            errors=[
+                "TAG_55_MISMATCH: Replacement Symbol does not match "
+                "original order Symbol"
+            ],
+        )
+
+    return ValidationResult(
+        valid=True,
+        msg_type="G",
+        parsed={
+            "cl_ord_id": tags.get("11"),
+            "orig_cl_ord_id": tags.get("41"),
+            "symbol": replacement_symbol,
+        },
+    )
+    
 def parse_execution_report(raw: str) -> ValidationResult:
     tags = parse_fix(raw)
     errors = []
