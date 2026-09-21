@@ -1,1 +1,4 @@
-mcp>=2.0
+mcp>=2.0,<3.0
+langgraph>=1.2,<2.0
+requests>=2.34,<3.0
+python-dotenv>=1.2,<2.0
