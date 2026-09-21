@@ -1,11 +1,12 @@
 import json
+from datetime import datetime
 from pathlib import Path
 
 from fix_validator import parse_fix, validate_new_order_single
 
 
 GOLDEN_ROOT = Path("golden_set")
-
+GOLDEN_REFERENCE_TIME = datetime(2020, 1, 1, 0, 2, 0)
 
 def load_cases():
     """Load the canonical golden evaluation corpus."""
@@ -35,7 +36,10 @@ def evaluate():
         msg_type = tags.get("35")
 
         if msg_type == "D":
-            result = validate_new_order_single(raw)
+            result = validate_new_order_single(
+    raw,
+    reference_time=GOLDEN_REFERENCE_TIME,
+)
             actual = result.verdict
 
             if actual == expected:
