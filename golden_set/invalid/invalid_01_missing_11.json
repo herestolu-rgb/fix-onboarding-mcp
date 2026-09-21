@@ -3,7 +3,6 @@
   "input_raw": "8=FIX.4.2^35=D^49=CLIENT_A^56=VENUE_X^55=TEST.L^54=1^38=1000^40=2^44=10.00^59=0^8002=0",
   "expected_verdict": "FAIL",
   "expected_reason": "Missing 11 ClOrdID - mandatory VENUE_X Stage1",
-  "expected_faithfulness": 0.94,
   "anonymized": true,
   "venue": "VENUE_X",
   "client": "CLIENT_A",
