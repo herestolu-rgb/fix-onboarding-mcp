@@ -27,11 +27,13 @@ def validate_new_order_single_tool(raw_fix_message: str) -> dict:
             e.g. "8=FIX.4.4|35=D|55=AAPL|54=1|38=1000|40=2|44=150.25|11=ORD1"
 
     Returns:
-        dict with 'valid' (bool), and either 'parsed' fields or 'errors' list.
+        dict with 'valid' (bool), 'verdict' (PASS/FAIL/ESCALATE),
+        and either 'parsed' fields or 'errors' list.
     """
     result = validate_new_order_single(raw_fix_message)
     return {
         "valid": result.valid,
+        "verdict": result.verdict,
         "msg_type": result.msg_type,
         "parsed": result.parsed,
         "errors": result.errors,
@@ -48,11 +50,13 @@ def parse_execution_report_tool(raw_fix_message: str) -> dict:
             e.g. "8=FIX.4.4|35=8|55=AAPL|39=2|32=1000|31=150.25"
 
     Returns:
-        dict with 'valid' (bool), and either 'parsed' fields or 'errors' list.
+        dict with 'valid' (bool), 'verdict' (PASS/FAIL/ESCALATE),
+        and either 'parsed' fields or 'errors' list.
     """
     result = parse_execution_report(raw_fix_message)
     return {
         "valid": result.valid,
+        "verdict": result.verdict,
         "msg_type": result.msg_type,
         "parsed": result.parsed,
         "errors": result.errors,

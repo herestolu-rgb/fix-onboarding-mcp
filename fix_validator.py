@@ -20,9 +20,22 @@ class ValidationResult:
     msg_type: Optional[str] = None
     parsed: dict = field(default_factory=dict)
     errors: list = field(default_factory=list)
+    verdict: Optional[str] = None
+
+    def __post_init__(self):
+        # Single source of truth: verdict. If omitted, derive PASS/FAIL from valid
+        # (current call sites). Then valid is always (verdict == "PASS"), so
+        # FAIL and a future ESCALATE both have valid == False.
+        if self.verdict is None:
+            self.verdict = "PASS" if self.valid else "FAIL"
+        if self.verdict not in ("PASS", "FAIL", "ESCALATE"):
+            raise ValueError(
+                f"verdict must be PASS, FAIL, or ESCALATE, got {self.verdict!r}"
+            )
+        self.valid = self.verdict == "PASS"
+
     def __repr__(self):
-        status = "PASS" if self.valid else "FAIL"
-        return f"[{status}] {self.msg_type or '?'} -> {self.parsed if self.valid else self.errors}"
+        return f"[{self.verdict}] {self.msg_type or '?'} -> {self.parsed if self.valid else self.errors}"
 
 def parse_fix(raw: str) -> dict:
     """Split a FIX-style tag string into a dict.

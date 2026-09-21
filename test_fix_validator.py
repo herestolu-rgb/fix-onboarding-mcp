@@ -1,5 +1,5 @@
 import unittest
-from fix_validator import parse_fix, validate_new_order_single, parse_execution_report
+from fix_validator import ValidationResult, parse_fix, validate_new_order_single, parse_execution_report
 
 
 class TestParseFixDelimiters(unittest.TestCase):
@@ -28,15 +28,23 @@ class TestParseFixDelimiters(unittest.TestCase):
         )
 
 
+class TestValidationResultVerdict(unittest.TestCase):
+    def test_unsupported_verdict_rejected(self):
+        with self.assertRaises(ValueError):
+            ValidationResult(valid=False, verdict="BANANA")
+
+
 class TestNewOrderSingle(unittest.TestCase):
     def test_valid_limit_order(self):
         r = validate_new_order_single("8=FIX.4.4|35=D|55=AAPL|54=1|38=1000|40=2|44=150.25|11=ORD1")
         self.assertTrue(r.valid)
+        self.assertEqual(r.verdict, "PASS")
         self.assertEqual(r.parsed["price"], "150.25")
 
     def test_limit_order_missing_price(self):
         r = validate_new_order_single("8=FIX.4.4|35=D|55=AAPL|54=1|38=1000|40=2|11=ORD2")
         self.assertFalse(r.valid)
+        self.assertEqual(r.verdict, "FAIL")
         self.assertTrue(any("TAG_44_MISSING" in e for e in r.errors))
 
     def test_market_order_with_unexpected_price(self):
