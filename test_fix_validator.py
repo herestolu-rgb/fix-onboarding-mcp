@@ -1,5 +1,31 @@
 import unittest
-from fix_validator import validate_new_order_single, parse_execution_report
+from fix_validator import parse_fix, validate_new_order_single, parse_execution_report
+
+
+class TestParseFixDelimiters(unittest.TestCase):
+    """Equivalent |, ^, and SOH encodings must parse to the same tags."""
+
+    PIPE = "35=D|11=ABC123|55=AAPL|54=1|38=100|40=1|"
+    CARET = "35=D^11=ABC123^55=AAPL^54=1^38=100^40=1^"
+    SOH = "35=D\x0111=ABC123\x0155=AAPL\x0154=1\x0138=100\x0140=1\x01"
+
+    def test_pipe_caret_soh_equivalent(self):
+        pipe_tags = parse_fix(self.PIPE)
+        caret_tags = parse_fix(self.CARET)
+        soh_tags = parse_fix(self.SOH)
+        self.assertEqual(pipe_tags, caret_tags)
+        self.assertEqual(pipe_tags, soh_tags)
+        self.assertEqual(
+            pipe_tags,
+            {
+                "35": "D",
+                "11": "ABC123",
+                "55": "AAPL",
+                "54": "1",
+                "38": "100",
+                "40": "1",
+            },
+        )
 
 
 class TestNewOrderSingle(unittest.TestCase):

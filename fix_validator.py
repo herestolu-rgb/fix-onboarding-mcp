@@ -25,8 +25,21 @@ class ValidationResult:
         return f"[{status}] {self.msg_type or '?'} -> {self.parsed if self.valid else self.errors}"
 
 def parse_fix(raw: str) -> dict:
+    """Split a FIX-style tag string into a dict.
+
+    SOH (\\x01) is the wire delimiter. '|' and '^' are accepted as
+    human-readable stand-ins when SOH is absent. Pair parsing is unchanged.
+    """
+    if "\x01" in raw:
+        sep = "\x01"
+    elif "|" in raw:
+        sep = "|"
+    elif "^" in raw:
+        sep = "^"
+    else:
+        sep = "|"
     tags = {}
-    for pair in raw.split("|"):
+    for pair in raw.split(sep):
         pair = pair.strip()
         if not pair or "=" not in pair: continue
         tag, value = pair.split("=", 1)
