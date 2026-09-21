@@ -25,7 +25,25 @@ TAG_NAMES = {
     "31": "LastPx",
 }
 
-SIDE_MAP = {"1": "Buy", "2": "Sell"}
+SIDE_MAP = {
+    "1": "Buy",
+    "2": "Sell",
+    "3": "Buy Minus",
+    "4": "Sell Plus",
+    "5": "Sell Short",
+    "6": "Sell Short Exempt",
+    "7": "Undisclosed",
+    "8": "Cross",
+    "9": "Cross Short",
+    "A": "Cross Short Exempt",
+    "B": "As Defined",
+    "C": "Opposite",
+    "D": "Subscribe",
+    "E": "Redeem",
+    "F": "Lend",
+    "G": "Borrow",
+    "H": "Sell Undisclosed",
+}
 
 ORD_TYPE_MAP = {
     "1": "Market",

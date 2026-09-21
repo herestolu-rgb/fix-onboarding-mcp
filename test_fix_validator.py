@@ -60,10 +60,22 @@ class TestNewOrderSingle(unittest.TestCase):
 
         self.assertFalse(r.valid)
 
-    def test_invalid_side(self):
+    def test_standard_side_code_is_valid(self):
         r = validate_new_order_single(
             "8=FIX.4.4|35=D|55=AAPL|54=9|38=1000|40=1|11=ORD4"
         )
+
+        self.assertTrue(r.valid)
+        self.assertEqual(r.verdict, "PASS")
+        self.assertEqual(r.parsed["side"], "Cross Short")
+
+    def test_unrecognised_side_code_is_invalid(self):
+        r = validate_new_order_single(
+            "8=FIX.4.4|35=D|55=AAPL|54=Z|38=1000|40=1|11=ORD4"
+        )
+
+        self.assertFalse(r.valid)
+        self.assertEqual(r.verdict, "FAIL")
 
         self.assertFalse(r.valid)
 
