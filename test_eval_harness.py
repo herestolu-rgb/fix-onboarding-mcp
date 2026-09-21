@@ -19,6 +19,35 @@ class TestEvalHarness(unittest.TestCase):
         self.assertEqual(msg_types.count("G"), 20)
         self.assertEqual(len(msg_types), 70)
 
+    def test_out_of_scope_cases_are_explicitly_classified(self):
+        cases = load_cases()
+
+        out_of_scope = [
+            case
+            for case in cases
+            if case.get("evaluation_scope") == "OUT_OF_SCOPE"
+        ]
+
+        self.assertEqual(len(out_of_scope), 9)
+
+        allowed_reasons = {
+            "VENUE_SIDE_POLICY",
+            "VENUE_FIRMUP_POLICY",
+            "REGULATORY_LEI_POLICY",
+        }
+
+        for case in out_of_scope:
+            self.assertIn("scope_reason", case)
+            self.assertIn(case["scope_reason"], allowed_reasons)
+
+        reasons = [
+            case["scope_reason"]
+            for case in out_of_scope
+        ]
+
+        self.assertEqual(reasons.count("VENUE_SIDE_POLICY"), 3)
+        self.assertEqual(reasons.count("VENUE_FIRMUP_POLICY"), 3)
+        self.assertEqual(reasons.count("REGULATORY_LEI_POLICY"), 3)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

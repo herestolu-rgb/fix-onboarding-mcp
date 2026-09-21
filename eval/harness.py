@@ -33,13 +33,22 @@ def evaluate():
     matched = 0
     mismatched = 0
     unsupported = 0
+    out_of_scope = 0
 
     for case in cases:
         raw = case["input_raw"]
         expected = case["expected_verdict"]
         tags = parse_fix(raw)
         msg_type = tags.get("35")
-
+        if case.get("evaluation_scope") == "OUT_OF_SCOPE":
+            out_of_scope += 1
+            print(
+                f"{case['id']} "
+                f"expected={expected} "
+                f"status=OUT_OF_SCOPE "
+                f"reason={case.get('scope_reason')}"
+            )
+            continue
         if msg_type == "D":
             result = validate_new_order_single(
                 raw,
@@ -84,13 +93,14 @@ def evaluate():
 
     evaluated = matched + mismatched
     discovered = len(cases)
-    accounted = evaluated + unsupported
+    accounted = evaluated + unsupported + out_of_scope
     unaccounted = discovered - accounted
 
     print()
     print("Summary:")
     print(f"  Discovered:  {discovered}")
     print(f"  Evaluated:   {evaluated}")
+    print(f"  OutOfScope:  {out_of_scope}")
     print(f"  Unsupported: {unsupported}")
     print(f"  Matched:     {matched}")
     print(f"  Mismatched:  {mismatched}")

@@ -5,7 +5,9 @@
   "expected_reason": "Missing MiFID2 LEI - VENUE_Y requires 20013 or 453 group with 452=13",
   "expected_faithfulness": 0.94,
   "anonymized": true,
-  "venue": "VENUE_X",
+  "venue": "VENUE_Y",
   "client": "CLIENT_A",
-  "pii": false
+  "pii": false,
+  "evaluation_scope": "OUT_OF_SCOPE",
+  "scope_reason": "REGULATORY_LEI_POLICY"
 }

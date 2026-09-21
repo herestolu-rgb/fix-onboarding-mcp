@@ -7,5 +7,7 @@
   "anonymized": true,
   "venue": "VENUE_X",
   "client": "CLIENT_A",
-  "pii": false
+  "pii": false,
+  "evaluation_scope": "OUT_OF_SCOPE",
+  "scope_reason": "VENUE_SIDE_POLICY"
 }
