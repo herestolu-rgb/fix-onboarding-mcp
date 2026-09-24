@@ -54,14 +54,14 @@ related authority boundaries without attempting to implement every venue,
 regulatory or state-integration rule at once:
 
 - explicit venue context controls whether venue policy may be applied
-- explicit authoritative-state provenance controls whether supplied order state
-  may be used for state-dependent Cancel/Replace validation
-
+- trusted state acquisition controls whether authoritative original-order state
+  is available for state-dependent Cancel/Replace validation
 RAG remains outside the deterministic verdict path.
 
 ---
 
 ## Current Implementation
+
 
 ### Deterministic FIX Validation
 
@@ -75,7 +75,7 @@ message workflows, including:
 - explicit PASS / FAIL / ESCALATE verdict semantics
 - explicit decision provenance using PROTOCOL / POLICY / AUTHORITY
 - explicit contextual venue Side validation
-- explicit authoritative-state gating for Cancel/Replace comparison
+- trusted resolver-based state acquisition for Cancel/Replace comparison
 
 Generic FIX protocol validity is intentionally separated from venue-specific,
 regulatory and state-dependent policy.
@@ -123,43 +123,63 @@ an unknown venue context was also supplied.
 
 #### Authoritative order-state boundary (#005)
 
-Cancel/Replace (`35=G`) validation introduces the same authority principle for
+Cancel/Replace (`35=G`) validation introduced the same authority principle for
 mutable original-order state.
 
-Supplying an `original_order` dictionary does not, by itself, make that state
-authoritative.
+#005 established that possessing original-order data did not, by itself, make
+that state authoritative. State-dependent comparison was permitted only when
+the caller explicitly identified the supplied state as `AUTHORITATIVE`.
 
-The current validator contract requires explicit state provenance before
-state-dependent comparison is permitted:
-
-- original state absent -> ESCALATE / AUTHORITY
-- original state present with provenance omitted -> ESCALATE / AUTHORITY
-- original state marked `CALLER_ASSERTED` -> ESCALATE / AUTHORITY
-- original state marked with an unknown provenance value -> ESCALATE / AUTHORITY
-- original state marked `AUTHORITATIVE` -> deterministic comparison is permitted
-
-For example:
-
-    validate_cancel_replace(
-        raw,
-        original_order={"55": "TEST.L"},
-        original_order_source="AUTHORITATIVE",
-    )
-
-The `AUTHORITATIVE` marker is an explicit trust contract at the validator
-boundary. It does **not** independently prove that the supplied state genuinely
-originated from an OMS, order store or other authoritative system.
-
-A caller could falsely label state as `AUTHORITATIVE`. Establishing trusted
-state acquisition and binding that state to an authoritative external source
-remains a separate integration problem.
-
-The purpose of the current slice is therefore narrower:
+This established the principle:
 
     state data != state authority
 
-The validator fail-closes when state is absent or its authority has not been
-explicitly established.
+However, the `AUTHORITATIVE` marker was still a trust contract rather than
+proof of provenance. A caller could supply an `original_order` dictionary and
+self-certify it as authoritative.
+
+That limitation led directly to #006.
+
+#### Trusted state acquisition boundary (#006)
+
+#006 removes caller-supplied original-order state and caller-supplied provenance
+from the public Cancel/Replace validator contract.
+
+The caller supplies the FIX message. The validator extracts `OrigClOrdID (41)`
+as the reference identifying the required original order and acquires the
+corresponding state through an injected resolver:
+
+    validate_cancel_replace(
+        raw,
+        resolve_order_state=resolve_order_state,
+    )
+
+Tag `41` is a reference used to request state. Its presence does not make the
+message itself authoritative.
+
+The acquisition boundary fail-closes:
+
+- no resolver -> ESCALATE / AUTHORITY / `NO_RESOLVER`
+- resolver returns no state -> ESCALATE / AUTHORITY / `AUTHORITY_NOT_FOUND`
+- resolver fails -> ESCALATE / AUTHORITY / `AUTHORITY_UNAVAILABLE`
+- state acquired -> deterministic state-dependent comparison may proceed
+
+Protocol validation still runs before state acquisition. Protocol-invalid
+Cancel/Replace messages therefore FAIL / PROTOCOL without requiring an
+authoritative-state lookup.
+
+The implemented boundary establishes:
+
+    authoritative state is acquired, not supplied
+
+The resolver is treated as a trusted dependency supplied by system assembly.
+#006 does **not** cryptographically prove that a resolver is connected to a
+genuine OMS, order store or other real-world authority. A party controlling
+application assembly could still inject an inappropriate resolver.
+
+Production OMS integration, deployment trust, authentication, cryptographic
+provenance, caching and distributed-state concerns remain separate integration
+problems.
 
 ### Verdict Semantics
 
@@ -279,9 +299,9 @@ descriptive corpus metadata such as a `venue` field. Contextual venue policy is
 activated only by explicit `validation_context`.
 
 For Cancel/Replace cases, the harness also does not manufacture authoritative
-original-order state. It invokes the validator without original-order state, so
-state-dependent cases correctly remain ESCALATE when the required authority is
-unavailable.
+original-order state or inject a synthetic trusted resolver. State-dependent
+cases therefore correctly remain ESCALATE when the required authoritative
+state cannot be acquired.
 
 This is intentional. Corpus fixtures or expected outcomes do not themselves
 acquire authority merely because they are useful for evaluation.
@@ -300,7 +320,7 @@ Run the complete unit-test suite with:
 
 Current local verification:
 
-- **49/49 tests passing**
+- **52/52 tests passing**
 - **64/64 evaluated corpus cases matched**
 - **0 mismatches**
 - **0 unsupported**
@@ -450,15 +470,19 @@ planned richer contextual capability.**
 The first contextual venue-policy slice is implemented using explicit
 structured authority and deterministic policy data.
 
-The authoritative-state boundary for Cancel/Replace is also implemented at the
-validator contract level. Acquisition of genuinely authoritative external order
-state remains planned integration work.
+The trusted-state acquisition boundary for Cancel/Replace is also implemented
+at the validator contract level. The validator acquires original-order state
+through an injected trusted resolver rather than accepting state and provenance
+directly from the caller.
+
+Integration with a genuine external OMS or authoritative order store remains
+planned integration work.
 
 Future contextual work can expand this approach to:
 
 - additional venue-specific onboarding profiles
 - regulatory rule profiles
-- authoritative order-state acquisition and integration
+- production OMS / authoritative order-store integration
 - FIX specification retrieval
 - client onboarding documentation
 - context-grounded explanations
@@ -541,6 +565,8 @@ alignment, contextual-validation and authoritative-state work:
 11. **Evaluation metrics should only be presented as measured when an executable
     process actually produced them.**
 12. **Authority must be established, not inferred from the presence of data.**
+13. **Authoritative mutable state should be acquired through a trusted boundary,
+    not supplied and self-certified by the caller.**
 
 ---
 
@@ -595,7 +621,9 @@ For the optional local LLM explanation prototype, see `DEMO.md`.
 - explicit ValidationContext venue-policy authority boundary
 - initial deterministic VENUE_X Side policy
 - explicit authoritative-state boundary for Cancel/Replace
-- fail-closed handling of absent, unqualified, caller-asserted or unknown state provenance
+- trusted resolver-based acquisition of original-order state
+- fail-closed handling of missing resolver, unavailable state and resolver failure
+- removal of caller-supplied original-order state and provenance self-certification
 - MCP validation interface with explicit contextual `venue_id`
 - deterministic decision freeze-point before LLM explanation
 - executable test proving the LLM cannot mutate a deterministic verdict
@@ -616,7 +644,7 @@ For the optional local LLM explanation prototype, see `DEMO.md`.
 - additional venue-profile validation
 - FirmUp policy validation
 - regulatory LEI/profile validation
-- authoritative order-state acquisition and external integration
+- production OMS / authoritative order-store integration
 - hybrid retrieval
 - reranking
 - measured RAG evaluation
