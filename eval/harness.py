@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fix_validator import (
+    ValidationContext,
     parse_fix,
     validate_cancel_replace,
     validate_new_order_single,
@@ -27,6 +28,20 @@ def load_cases():
     return cases
 
 
+def build_validation_context(case):
+    context_data = case.get("validation_context")
+
+    if context_data is None:
+        return None
+
+    venue_id = context_data.get("venue_id")
+
+    if venue_id is None:
+        return None
+
+    return ValidationContext(venue_id=venue_id)
+
+
 def evaluate():
     cases = load_cases()
 
@@ -38,10 +53,13 @@ def evaluate():
     for case in cases:
         raw = case["input_raw"]
         expected = case["expected_verdict"]
+
         tags = parse_fix(raw)
         msg_type = tags.get("35")
+
         if case.get("evaluation_scope") == "OUT_OF_SCOPE":
             out_of_scope += 1
+
             print(
                 f"{case['id']} "
                 f"expected={expected} "
@@ -49,11 +67,16 @@ def evaluate():
                 f"reason={case.get('scope_reason')}"
             )
             continue
+
         if msg_type == "D":
+            context = build_validation_context(case)
+
             result = validate_new_order_single(
                 raw,
                 reference_time=GOLDEN_REFERENCE_TIME,
+                context=context,
             )
+
             actual = result.verdict
 
             if actual == expected:
@@ -86,6 +109,7 @@ def evaluate():
 
         else:
             unsupported += 1
+
             print(
                 f"{case['id']} "
                 f"expected={expected} msg_type={msg_type} status=UNSUPPORTED"
