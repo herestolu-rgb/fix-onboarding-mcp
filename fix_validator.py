@@ -324,12 +324,13 @@ def validate_new_order_single(
 def validate_cancel_replace(
     raw: str,
     original_order: Optional[dict] = None,
+    original_order_source: Optional[str] = None,
 ) -> ValidationResult:
     """Validate an Order Cancel/Replace Request (35=G).
 
-    Some replacement checks require authoritative state from the original
-    order. If that context is unavailable, return ESCALATE rather than
-    guessing PASS or FAIL.
+    State-dependent replacement checks require explicitly authoritative
+    original-order state. Missing, unqualified, or caller-asserted state
+    causes the validator to abstain rather than guess PASS or FAIL.
     """
     tags = parse_fix(raw)
     errors = []
@@ -341,6 +342,7 @@ def validate_cancel_replace(
             errors=[
                 f"MsgType is '{tags.get('35')}', expected 'G'"
             ],
+            decision_layer="PROTOCOL",
         )
 
     # Minimal deterministic fields needed for the contextual check.
@@ -351,16 +353,18 @@ def validate_cancel_replace(
                 f"{TAG_NAMES[tag]} is required for Order Cancel/Replace"
             )
 
+    # Protocol failures take precedence over state authority.
     if errors:
         return ValidationResult(
             valid=False,
             msg_type="G",
             errors=errors,
+            decision_layer="PROTOCOL",
         )
 
-    # The replacement references an original order via OrigClOrdID (41).
-    # Without authoritative original-order state, we cannot determine
-    # whether fields such as Symbol conflict with that order.
+    # #005 authoritative-state boundary.
+    #
+    # State absence is an authority problem, not a protocol failure.
     if original_order is None:
         return ValidationResult(
             valid=False,
@@ -370,11 +374,31 @@ def validate_cancel_replace(
                 "CONTEXT_REQUIRED: Original order state is required "
                 "to validate Order Cancel/Replace"
             ],
+            decision_layer="AUTHORITY",
+        )
+
+    # Merely possessing state does not make it authoritative.
+    #
+    # Fail closed: only the explicit AUTHORITATIVE marker unlocks
+    # state-dependent deterministic comparison. Omitted, caller-asserted,
+    # misspelled, or otherwise unknown provenance must abstain.
+    if original_order_source != "AUTHORITATIVE":
+        return ValidationResult(
+            valid=False,
+            msg_type="G",
+            verdict="ESCALATE",
+            errors=[
+                "CONTEXT_UNAUTHORITATIVE: Original order state is "
+                "present but has not crossed the authoritative-state boundary"
+            ],
+            decision_layer="AUTHORITY",
         )
 
     original_symbol = original_order.get("55")
     replacement_symbol = tags.get("55")
 
+    # We have authoritative state, but it lacks the field required for
+    # this deterministic comparison. Abstain rather than inventing state.
     if original_symbol is None:
         return ValidationResult(
             valid=False,
@@ -384,6 +408,7 @@ def validate_cancel_replace(
                 "CONTEXT_REQUIRED: Original order Symbol (55) "
                 "is unavailable"
             ],
+            decision_layer="AUTHORITY",
         )
 
     if replacement_symbol != original_symbol:
@@ -394,6 +419,7 @@ def validate_cancel_replace(
                 "TAG_55_MISMATCH: Replacement Symbol does not match "
                 "original order Symbol"
             ],
+            decision_layer="POLICY",
         )
 
     return ValidationResult(
@@ -404,6 +430,7 @@ def validate_cancel_replace(
             "orig_cl_ord_id": tags.get("41"),
             "symbol": replacement_symbol,
         },
+        decision_layer="POLICY",
     )
 
 

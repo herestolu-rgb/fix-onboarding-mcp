@@ -14,8 +14,9 @@ for real electronic-trading and FIX onboarding workflows.
 ![FIX Onboarding MCP - Thin Alignment Architecture](assets/fix-onboarding-mcp-thin-alignment.png)
 
 The diagram above represents the thin-alignment architecture from the earlier
-design phase. The executable implementation has since added an initial
-contextual-validation slice while retaining the same deterministic foundation.
+design phase. The executable implementation has since added contextual
+validation and an initial authoritative-state boundary while retaining the same
+deterministic foundation.
 
 The current validation path separates:
 
@@ -30,12 +31,12 @@ The current validation path separates:
          +---- protocol failure ------> FAIL / PROTOCOL
          |
          v
-    Explicit validation context
+    Explicit validation context / authoritative state
          |
          +---- authority unavailable -> ESCALATE / AUTHORITY
          |
          v
-    Deterministic venue policy
+    Deterministic contextual comparison / policy
          |
          +---- policy failure --------> FAIL / POLICY
          |
@@ -48,9 +49,13 @@ The current validation path separates:
 The deterministic decision is the freeze-point. The LLM may explain the result,
 but it does not own or mutate the PASS / FAIL / ESCALATE verdict.
 
-The current contextual implementation is deliberately narrow. It proves the
-authority boundary using an explicit VENUE_X Side policy rather than attempting
-to implement every venue or regulatory rule at once.
+The current contextual implementation is deliberately narrow. It proves two
+related authority boundaries without attempting to implement every venue,
+regulatory or state-integration rule at once:
+
+- explicit venue context controls whether venue policy may be applied
+- explicit authoritative-state provenance controls whether supplied order state
+  may be used for state-dependent Cancel/Replace validation
 
 RAG remains outside the deterministic verdict path.
 
@@ -70,9 +75,10 @@ message workflows, including:
 - explicit PASS / FAIL / ESCALATE verdict semantics
 - explicit decision provenance using PROTOCOL / POLICY / AUTHORITY
 - explicit contextual venue Side validation
+- explicit authoritative-state gating for Cancel/Replace comparison
 
-Generic FIX protocol validity is intentionally separated from venue-specific
-and regulatory policy.
+Generic FIX protocol validity is intentionally separated from venue-specific,
+regulatory and state-dependent policy.
 
 For example, FIX Side (`54`) value `3` is a recognised standard Side value
 (`Buy Minus`). It is therefore not rejected merely because an individual venue
@@ -87,8 +93,13 @@ FAIL rather than a generic protocol failure.
 
 ### Explicit Authority Boundary
 
-Contextual policy is activated only through explicit caller-supplied validation
-context.
+The project distinguishes between possessing data and possessing authority to
+use that data for a deterministic contextual decision.
+
+#### Venue-policy authority (#004)
+
+Contextual venue policy is activated only through explicit caller-supplied
+validation context.
 
 For example:
 
@@ -110,6 +121,46 @@ Protocol validation runs before contextual policy evaluation. A protocol-invalid
 message is therefore not converted into an authority escalation merely because
 an unknown venue context was also supplied.
 
+#### Authoritative order-state boundary (#005)
+
+Cancel/Replace (`35=G`) validation introduces the same authority principle for
+mutable original-order state.
+
+Supplying an `original_order` dictionary does not, by itself, make that state
+authoritative.
+
+The current validator contract requires explicit state provenance before
+state-dependent comparison is permitted:
+
+- original state absent -> ESCALATE / AUTHORITY
+- original state present with provenance omitted -> ESCALATE / AUTHORITY
+- original state marked `CALLER_ASSERTED` -> ESCALATE / AUTHORITY
+- original state marked with an unknown provenance value -> ESCALATE / AUTHORITY
+- original state marked `AUTHORITATIVE` -> deterministic comparison is permitted
+
+For example:
+
+    validate_cancel_replace(
+        raw,
+        original_order={"55": "TEST.L"},
+        original_order_source="AUTHORITATIVE",
+    )
+
+The `AUTHORITATIVE` marker is an explicit trust contract at the validator
+boundary. It does **not** independently prove that the supplied state genuinely
+originated from an OMS, order store or other authoritative system.
+
+A caller could falsely label state as `AUTHORITATIVE`. Establishing trusted
+state acquisition and binding that state to an authoritative external source
+remains a separate integration problem.
+
+The purpose of the current slice is therefore narrower:
+
+    state data != state authority
+
+The validator fail-closes when state is absent or its authority has not been
+explicitly established.
+
 ### Verdict Semantics
 
 The current validation model distinguishes between:
@@ -124,10 +175,10 @@ implemented.
 
 ### Decision Provenance
 
-NewOrderSingle validation also records the layer responsible for the decision:
+Validation may also record the layer responsible for the decision:
 
 - **PROTOCOL** - generic deterministic FIX validation
-- **POLICY** - deterministic contextual policy validation
+- **POLICY** - deterministic contextual or state-dependent policy validation
 - **AUTHORITY** - required explicit authority is unavailable
 
 This makes the reason a verdict exists visible to downstream callers rather than
@@ -149,6 +200,10 @@ For contextual NewOrderSingle validation, callers may explicitly provide a
 authority is supplied.
 
 TargetCompID (`56`) alone does not activate venue policy through MCP.
+
+The current authoritative original-order state boundary is implemented in the
+deterministic Cancel/Replace validator. The repository does not yet expose an
+authoritative order-state acquisition mechanism through MCP.
 
 The boolean invariant remains:
 
@@ -220,8 +275,16 @@ Three VENUE_SIDE_POLICY cases that were previously out of scope are now
 executed using explicit caller-supplied validation context.
 
 The evaluation harness does not infer authority from FIX CompID fields or from
-descriptive corpus metadata such as a `venue` field. Contextual policy is
+descriptive corpus metadata such as a `venue` field. Contextual venue policy is
 activated only by explicit `validation_context`.
+
+For Cancel/Replace cases, the harness also does not manufacture authoritative
+original-order state. It invokes the validator without original-order state, so
+state-dependent cases correctly remain ESCALATE when the required authority is
+unavailable.
+
+This is intentional. Corpus fixtures or expected outcomes do not themselves
+acquire authority merely because they are useful for evaluation.
 
 The corpus contains parametrically repeated cases, so **70 corpus files should
 not be interpreted as 70 independent validation scenarios**. Corpus size and
@@ -237,7 +300,7 @@ Run the complete unit-test suite with:
 
 Current local verification:
 
-- **46/46 tests passing**
+- **49/49 tests passing**
 - **64/64 evaluated corpus cases matched**
 - **0 mismatches**
 - **0 unsupported**
@@ -304,6 +367,15 @@ The important result is not merely that the benchmark became green again. The
 system now reaches those contextual verdicts through the intended authority
 boundary.
 
+The #005 authoritative-state work extends the same principle to mutable state.
+The presence of original-order data is not treated as sufficient authority for
+a state-dependent decision.
+
+The canonical result remains 64/64 matched because the Cancel/Replace edge
+cases requiring unavailable original-order authority continue to ESCALATE. The
+harness does not inject synthetic authoritative state merely to obtain a
+PASS/FAIL decision.
+
 The project therefore treats **explained correctness** as more important than a
 green score in isolation.
 
@@ -338,20 +410,20 @@ retrieval should not automatically acquire decision authority.
 One possible future pattern is:
 
     venue / regulatory documents
-              |
-              v
+             |
+             v
          retrieval / extraction
-              |
-              v
+             |
+             v
          candidate policy
-              |
-              v
+             |
+             v
           human review
-              |
-              v
+             |
+             v
       structured policy profile
-              |
-              v
+             |
+             v
     deterministic validation
 
 This keeps retrieval useful without allowing retrieved text to silently become
@@ -378,11 +450,15 @@ planned richer contextual capability.**
 The first contextual venue-policy slice is implemented using explicit
 structured authority and deterministic policy data.
 
+The authoritative-state boundary for Cancel/Replace is also implemented at the
+validator contract level. Acquisition of genuinely authoritative external order
+state remains planned integration work.
+
 Future contextual work can expand this approach to:
 
 - additional venue-specific onboarding profiles
 - regulatory rule profiles
-- authoritative order-state integration
+- authoritative order-state acquisition and integration
 - FIX specification retrieval
 - client onboarding documentation
 - context-grounded explanations
@@ -446,7 +522,7 @@ behaviour.
 ## Engineering Principles
 
 The project currently follows several principles that emerged from the
-alignment and contextual-validation work:
+alignment, contextual-validation and authoritative-state work:
 
 1. **A green benchmark does not necessarily mean correct software.**
 2. **Multiple models agreeing does not constitute evidence if they share the
@@ -464,6 +540,7 @@ alignment and contextual-validation work:
     the implementation into pretending that boundary does not exist.**
 11. **Evaluation metrics should only be presented as measured when an executable
     process actually produced them.**
+12. **Authority must be established, not inferred from the presence of data.**
 
 ---
 
@@ -515,8 +592,10 @@ For the optional local LLM explanation prototype, see `DEMO.md`.
 - deterministic FIX validation foundation
 - PASS / FAIL / ESCALATE semantics
 - PROTOCOL / POLICY / AUTHORITY decision provenance
-- explicit ValidationContext authority boundary
+- explicit ValidationContext venue-policy authority boundary
 - initial deterministic VENUE_X Side policy
+- explicit authoritative-state boundary for Cancel/Replace
+- fail-closed handling of absent, unqualified, caller-asserted or unknown state provenance
 - MCP validation interface with explicit contextual `venue_id`
 - deterministic decision freeze-point before LLM explanation
 - executable test proving the LLM cannot mutate a deterministic verdict
@@ -537,7 +616,7 @@ For the optional local LLM explanation prototype, see `DEMO.md`.
 - additional venue-profile validation
 - FirmUp policy validation
 - regulatory LEI/profile validation
-- authoritative order-state integration
+- authoritative order-state acquisition and external integration
 - hybrid retrieval
 - reranking
 - measured RAG evaluation
