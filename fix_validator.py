@@ -6,7 +6,7 @@ A small, genuinely-working FIX message parser and validator.
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from typing import Optional
+from typing import Callable, Optional
 
 
 TAG_NAMES = {
@@ -323,14 +323,13 @@ def validate_new_order_single(
 
 def validate_cancel_replace(
     raw: str,
-    original_order: Optional[dict] = None,
-    original_order_source: Optional[str] = None,
+    resolve_order_state: Optional[Callable[[str], Optional[dict]]] = None,
 ) -> ValidationResult:
     """Validate an Order Cancel/Replace Request (35=G).
 
-    State-dependent replacement checks require explicitly authoritative
-    original-order state. Missing, unqualified, or caller-asserted state
-    causes the validator to abstain rather than guess PASS or FAIL.
+    State-dependent replacement checks acquire original-order state through
+    an injected resolver. Callers may identify the original order through
+    OrigClOrdID (41), but cannot supply or self-certify authoritative state.
     """
     tags = parse_fix(raw)
     errors = []
@@ -362,34 +361,45 @@ def validate_cancel_replace(
             decision_layer="PROTOCOL",
         )
 
-    # #005 authoritative-state boundary.
+    # #006 trusted-state acquisition boundary.
     #
-    # State absence is an authority problem, not a protocol failure.
+    # The caller supplies only the FIX message. OrigClOrdID (41) identifies
+    # the state required; authority comes from the resolver wired by trusted
+    # application/test assembly, not from caller-supplied state or labels.
+    if resolve_order_state is None:
+        return ValidationResult(
+            valid=False,
+            msg_type="G",
+            verdict="ESCALATE",
+            errors=[
+                "NO_RESOLVER: Trusted original-order state resolver "
+                "is required to validate Order Cancel/Replace"
+            ],
+            decision_layer="AUTHORITY",
+        )
+
+    try:
+        original_order = resolve_order_state(tags["41"])
+    except Exception:
+        return ValidationResult(
+            valid=False,
+            msg_type="G",
+            verdict="ESCALATE",
+            errors=[
+                "AUTHORITY_UNAVAILABLE: Trusted original-order state resolver "
+                "failed"
+            ],
+            decision_layer="AUTHORITY",
+        )
+
     if original_order is None:
         return ValidationResult(
             valid=False,
             msg_type="G",
             verdict="ESCALATE",
             errors=[
-                "CONTEXT_REQUIRED: Original order state is required "
-                "to validate Order Cancel/Replace"
-            ],
-            decision_layer="AUTHORITY",
-        )
-
-    # Merely possessing state does not make it authoritative.
-    #
-    # Fail closed: only the explicit AUTHORITATIVE marker unlocks
-    # state-dependent deterministic comparison. Omitted, caller-asserted,
-    # misspelled, or otherwise unknown provenance must abstain.
-    if original_order_source != "AUTHORITATIVE":
-        return ValidationResult(
-            valid=False,
-            msg_type="G",
-            verdict="ESCALATE",
-            errors=[
-                "CONTEXT_UNAUTHORITATIVE: Original order state is "
-                "present but has not crossed the authoritative-state boundary"
+                "AUTHORITY_NOT_FOUND: Original order state was not found "
+                "for the requested OrigClOrdID"
             ],
             decision_layer="AUTHORITY",
         )
