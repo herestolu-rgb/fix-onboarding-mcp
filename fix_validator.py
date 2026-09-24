@@ -59,6 +59,31 @@ ORD_STATUS_MAP = {
 }
 
 
+# #004 structured venue-policy data.
+#
+# This is deliberately small for the first implementation slice.
+# The FIX protocol remains responsible for determining whether a Side
+# value is recognised. Venue policy answers the separate question:
+# "Does this explicitly selected venue allow that otherwise-valid Side?"
+VENUE_POLICIES = {
+    "VENUE_X": {
+        "allowed_sides": {"1", "2", "5"},
+    },
+}
+
+
+@dataclass(frozen=True)
+class ValidationContext:
+    """Explicit caller-supplied context for contextual validation.
+
+    Message fields such as SenderCompID (49) and TargetCompID (56) are
+    FIX data. They do not implicitly grant authority to apply a venue
+    policy. Venue policy is activated only through explicit context.
+    """
+
+    venue_id: Optional[str] = None
+
+
 @dataclass
 class ValidationResult:
     valid: bool
@@ -67,10 +92,14 @@ class ValidationResult:
     errors: list = field(default_factory=list)
     verdict: Optional[str] = None
 
+    # #004 Checkpoint 2:
+    # Structured provenance for the layer that made the decision.
+    decision_layer: Optional[str] = None
+
     def __post_init__(self):
         # Single source of truth: verdict. If omitted, derive PASS/FAIL from valid
         # (current call sites). Then valid is always (verdict == "PASS"), so
-        # FAIL and a future ESCALATE both have valid == False.
+        # FAIL and ESCALATE both have valid == False.
         if self.verdict is None:
             self.verdict = "PASS" if self.valid else "FAIL"
 
@@ -78,6 +107,15 @@ class ValidationResult:
             raise ValueError(
                 f"verdict must be PASS, FAIL, or ESCALATE, got {self.verdict!r}"
             )
+
+        # #004 Checkpoint 2:
+        # Keep the vocabulary deliberately small and explicit.
+        if self.decision_layer is not None:
+            if self.decision_layer not in ("PROTOCOL", "POLICY", "AUTHORITY"):
+                raise ValueError(
+                    "decision_layer must be PROTOCOL, POLICY, or AUTHORITY, "
+                    f"got {self.decision_layer!r}"
+                )
 
         self.valid = self.verdict == "PASS"
 
@@ -120,6 +158,7 @@ def parse_fix(raw: str) -> dict:
 def validate_new_order_single(
     raw: str,
     reference_time: Optional[datetime] = None,
+    context: Optional[ValidationContext] = None,
 ) -> ValidationResult:
     tags = parse_fix(raw)
     errors = []
@@ -132,6 +171,7 @@ def validate_new_order_single(
             valid=False,
             msg_type=tags.get("35"),
             errors=errors,
+            decision_layer="PROTOCOL",
         )
 
     # Required NewOrderSingle fields.
@@ -183,6 +223,10 @@ def validate_new_order_single(
 
     side = tags.get("54")
 
+    # Protocol-layer validation.
+    #
+    # A recognised Side value is valid FIX regardless of whether a
+    # particular venue subsequently chooses to permit it.
     if side and side not in SIDE_MAP:
         errors.append(
             f"Side '{side}' is not recognised"
@@ -201,12 +245,60 @@ def validate_new_order_single(
             "should not include Price (44)"
         )
 
+    # Protocol failures take precedence. Do not apply contextual policy
+    # to a message that is already invalid at the FIX protocol layer.
     if errors:
         return ValidationResult(
             valid=False,
             msg_type="D",
             errors=errors,
+            decision_layer="PROTOCOL",
         )
+
+    # #004 contextual-policy validation.
+    #
+    # Policy authority is activated only by explicit caller-supplied
+    # ValidationContext. We deliberately do NOT infer venue authority
+    # from FIX fields such as TargetCompID (56).
+    if context is not None and context.venue_id is not None:
+        venue_policy = VENUE_POLICIES.get(context.venue_id)
+
+        # Explicit policy validation was requested, but the requested
+        # authority cannot be bound. Abstain rather than guessing.
+        if venue_policy is None:
+            return ValidationResult(
+                valid=False,
+                msg_type="D",
+                verdict="ESCALATE",
+                errors=[
+                    "AUTHORITY_UNAVAILABLE: "
+                    f"No authoritative venue policy is available for "
+                    f"'{context.venue_id}'"
+                ],
+                decision_layer="AUTHORITY",
+            )
+
+        allowed_sides = venue_policy["allowed_sides"]
+
+        if side not in allowed_sides:
+            return ValidationResult(
+                valid=False,
+                msg_type="D",
+                errors=[
+                    "VENUE_SIDE_POLICY: "
+                    f"Side '{side}' ({SIDE_MAP.get(side, side)}) "
+                    f"is not permitted by venue "
+                    f"'{context.venue_id}'"
+                ],
+                decision_layer="POLICY",
+            )
+
+        # A known explicit venue policy was evaluated and passed.
+        decision_layer = "POLICY"
+    else:
+        # No contextual policy was requested; the protocol layer owns
+        # the successful decision.
+        decision_layer = "PROTOCOL"
 
     parsed = {
         "symbol": tags.get("55"),
@@ -225,7 +317,9 @@ def validate_new_order_single(
         valid=True,
         msg_type="D",
         parsed=parsed,
+        decision_layer=decision_layer,
     )
+
 
 def validate_cancel_replace(
     raw: str,
@@ -311,7 +405,8 @@ def validate_cancel_replace(
             "symbol": replacement_symbol,
         },
     )
-    
+
+
 def parse_execution_report(raw: str) -> ValidationResult:
     tags = parse_fix(raw)
     errors = []

@@ -2,6 +2,7 @@ import unittest
 from datetime import datetime
 
 from fix_validator import (
+    ValidationContext,
     ValidationResult,
     parse_execution_report,
     parse_fix,
@@ -77,7 +78,116 @@ class TestNewOrderSingle(unittest.TestCase):
         self.assertFalse(r.valid)
         self.assertEqual(r.verdict, "FAIL")
 
+    # #004 baseline protection:
+    # Side=3 is valid at the generic FIX protocol layer.
+    def test_side_3_is_protocol_valid_without_venue_context(self):
+        r = validate_new_order_single(
+            "8=FIX.4.4|35=D|55=AAPL|54=3|38=1000|40=1|11=ORD_SIDE3"
+        )
+
+        self.assertTrue(r.valid)
+        self.assertEqual(r.verdict, "PASS")
+        self.assertEqual(r.parsed["side"], "Buy Minus")
+
+        # #004 Checkpoint 2:
+        # The result must identify the layer that made the decision.
+        self.assertEqual(r.decision_layer, "PROTOCOL")
+
+    # #004 authority boundary:
+    # CompID is message data and must not silently activate venue policy.
+    def test_comp_id_does_not_imply_venue_policy(self):
+        r = validate_new_order_single(
+            "8=FIX.4.4|35=D|49=CLIENT|56=VENUE_X|55=AAPL|54=3|38=1000|40=1|11=ORD_SIDE3"
+        )
+
+        self.assertTrue(r.valid)
+        self.assertEqual(r.verdict, "PASS")
+        self.assertEqual(r.parsed["side"], "Buy Minus")
+
+    # #004 contextual-policy requirement:
+    # Explicit caller-supplied venue context activates venue policy.
+    def test_explicit_venue_context_rejects_side_3(self):
+        context = ValidationContext(
+            venue_id="VENUE_X",
+        )
+
+        r = validate_new_order_single(
+            "8=FIX.4.4|35=D|55=AAPL|54=3|38=1000|40=1|11=ORD_SIDE3",
+            context=context,
+        )
+
         self.assertFalse(r.valid)
+        self.assertEqual(r.verdict, "FAIL")
+        self.assertTrue(
+            any("VENUE_SIDE_POLICY" in error for error in r.errors)
+        )
+
+        # #004 Checkpoint 2:
+        self.assertEqual(r.decision_layer, "POLICY")
+
+    # #004 contextual-policy requirement:
+    # A known venue policy must also allow values explicitly permitted by it.
+    def test_explicit_venue_context_allows_permitted_side(self):
+        context = ValidationContext(
+            venue_id="VENUE_X",
+        )
+
+        r = validate_new_order_single(
+            "8=FIX.4.4|35=D|55=AAPL|54=1|38=1000|40=1|11=ORD_SIDE1",
+            context=context,
+        )
+
+        self.assertTrue(r.valid)
+        self.assertEqual(r.verdict, "PASS")
+        self.assertEqual(r.parsed["side"], "Buy")
+
+        # #004 Checkpoint 2:
+        # Protocol validation passed, but explicit venue policy made the
+        # final contextual decision.
+        self.assertEqual(r.decision_layer, "POLICY")
+
+    # #004 authority boundary:
+    # If explicit contextual validation is requested but the authority
+    # cannot be bound, the validator must abstain rather than guess.
+    def test_unknown_explicit_venue_context_escalates(self):
+        context = ValidationContext(
+            venue_id="VENUE_UNKNOWN",
+        )
+
+        r = validate_new_order_single(
+            "8=FIX.4.4|35=D|55=AAPL|54=3|38=1000|40=1|11=ORD_SIDE3",
+            context=context,
+        )
+
+        self.assertFalse(r.valid)
+        self.assertEqual(r.verdict, "ESCALATE")
+        self.assertTrue(
+            any("AUTHORITY_UNAVAILABLE" in error for error in r.errors)
+        )
+
+        # #004 Checkpoint 2:
+        self.assertEqual(r.decision_layer, "AUTHORITY")
+
+    # #004 protocol-first requirement:
+    # Protocol-invalid data must fail before contextual policy is considered.
+    def test_protocol_failure_precedes_contextual_policy(self):
+        context = ValidationContext(
+            venue_id="VENUE_UNKNOWN",
+        )
+
+        r = validate_new_order_single(
+            "8=FIX.4.4|35=D|55=AAPL|54=Z|38=1000|40=1|11=ORD_BAD_SIDE",
+            context=context,
+        )
+
+        self.assertFalse(r.valid)
+        self.assertEqual(r.verdict, "FAIL")
+        self.assertTrue(
+            any("not recognised" in error for error in r.errors)
+        )
+        self.assertFalse(
+            any("AUTHORITY_UNAVAILABLE" in error for error in r.errors)
+        )
 
     def test_missing_required_tags(self):
         r = validate_new_order_single(
@@ -194,6 +304,7 @@ class TestNewOrderSingle(unittest.TestCase):
             any("TAG_52_INVALID" in error for error in r.errors)
         )
 
+
 class TestCancelReplace(unittest.TestCase):
     def test_missing_original_order_context_escalates(self):
         r = validate_cancel_replace(
@@ -245,7 +356,8 @@ class TestCancelReplace(unittest.TestCase):
 
         self.assertFalse(r.valid)
         self.assertEqual(r.verdict, "FAIL")
-        
+
+
 class TestExecutionReport(unittest.TestCase):
     def test_valid_fill(self):
         r = parse_execution_report(

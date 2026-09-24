@@ -28,9 +28,17 @@ The prototype:
 
 1. parses the built-in FIX message
 2. performs deterministic validation
-3. attempts to obtain a short explanation from local Ollama
-4. falls back to a deterministic explanation if the Ollama call fails
-5. prints the result
+3. freezes the deterministic verdict and decision provenance
+4. attempts to obtain a short explanation from local Ollama
+5. falls back to a deterministic explanation if the Ollama call fails
+6. prints the frozen verdict and explanation
+
+The LLM is used for explanation only. It does not own or mutate the
+deterministic PASS / FAIL / ESCALATE verdict.
+
+Executable tests deliberately exercise a contradictory LLM response to verify
+that generated explanation text cannot change the deterministic validation
+result.
 
 The current demo does not demonstrate MCP tool invocation, sequence-gap
 detection, hybrid RAG retrieval, or a multi-provider LLM factory.
