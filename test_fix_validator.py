@@ -89,6 +89,10 @@ class TestNewOrderSingle(unittest.TestCase):
         self.assertEqual(r.verdict, "PASS")
         self.assertEqual(r.parsed["side"], "Buy Minus")
 
+        # #004 Checkpoint 2:
+        # The result must identify the layer that made the decision.
+        self.assertEqual(r.decision_layer, "PROTOCOL")
+
     # #004 authority boundary:
     # CompID is message data and must not silently activate venue policy.
     def test_comp_id_does_not_imply_venue_policy(self):
@@ -118,6 +122,9 @@ class TestNewOrderSingle(unittest.TestCase):
             any("VENUE_SIDE_POLICY" in error for error in r.errors)
         )
 
+        # #004 Checkpoint 2:
+        self.assertEqual(r.decision_layer, "POLICY")
+
     # #004 contextual-policy requirement:
     # A known venue policy must also allow values explicitly permitted by it.
     def test_explicit_venue_context_allows_permitted_side(self):
@@ -133,6 +140,11 @@ class TestNewOrderSingle(unittest.TestCase):
         self.assertTrue(r.valid)
         self.assertEqual(r.verdict, "PASS")
         self.assertEqual(r.parsed["side"], "Buy")
+
+        # #004 Checkpoint 2:
+        # Protocol validation passed, but explicit venue policy made the
+        # final contextual decision.
+        self.assertEqual(r.decision_layer, "POLICY")
 
     # #004 authority boundary:
     # If explicit contextual validation is requested but the authority
@@ -152,6 +164,9 @@ class TestNewOrderSingle(unittest.TestCase):
         self.assertTrue(
             any("AUTHORITY_UNAVAILABLE" in error for error in r.errors)
         )
+
+        # #004 Checkpoint 2:
+        self.assertEqual(r.decision_layer, "AUTHORITY")
 
     # #004 protocol-first requirement:
     # Protocol-invalid data must fail before contextual policy is considered.

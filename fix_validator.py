@@ -92,6 +92,10 @@ class ValidationResult:
     errors: list = field(default_factory=list)
     verdict: Optional[str] = None
 
+    # #004 Checkpoint 2:
+    # Structured provenance for the layer that made the decision.
+    decision_layer: Optional[str] = None
+
     def __post_init__(self):
         # Single source of truth: verdict. If omitted, derive PASS/FAIL from valid
         # (current call sites). Then valid is always (verdict == "PASS"), so
@@ -103,6 +107,15 @@ class ValidationResult:
             raise ValueError(
                 f"verdict must be PASS, FAIL, or ESCALATE, got {self.verdict!r}"
             )
+
+        # #004 Checkpoint 2:
+        # Keep the vocabulary deliberately small and explicit.
+        if self.decision_layer is not None:
+            if self.decision_layer not in ("PROTOCOL", "POLICY", "AUTHORITY"):
+                raise ValueError(
+                    "decision_layer must be PROTOCOL, POLICY, or AUTHORITY, "
+                    f"got {self.decision_layer!r}"
+                )
 
         self.valid = self.verdict == "PASS"
 
@@ -158,6 +171,7 @@ def validate_new_order_single(
             valid=False,
             msg_type=tags.get("35"),
             errors=errors,
+            decision_layer="PROTOCOL",
         )
 
     # Required NewOrderSingle fields.
@@ -238,6 +252,7 @@ def validate_new_order_single(
             valid=False,
             msg_type="D",
             errors=errors,
+            decision_layer="PROTOCOL",
         )
 
     # #004 contextual-policy validation.
@@ -248,7 +263,6 @@ def validate_new_order_single(
     if context is not None and context.venue_id is not None:
         venue_policy = VENUE_POLICIES.get(context.venue_id)
 
-        # #004 GREEN 2:
         # Explicit policy validation was requested, but the requested
         # authority cannot be bound. Abstain rather than guessing.
         if venue_policy is None:
@@ -261,6 +275,7 @@ def validate_new_order_single(
                     f"No authoritative venue policy is available for "
                     f"'{context.venue_id}'"
                 ],
+                decision_layer="AUTHORITY",
             )
 
         allowed_sides = venue_policy["allowed_sides"]
@@ -275,7 +290,15 @@ def validate_new_order_single(
                     f"is not permitted by venue "
                     f"'{context.venue_id}'"
                 ],
+                decision_layer="POLICY",
             )
+
+        # A known explicit venue policy was evaluated and passed.
+        decision_layer = "POLICY"
+    else:
+        # No contextual policy was requested; the protocol layer owns
+        # the successful decision.
+        decision_layer = "PROTOCOL"
 
     parsed = {
         "symbol": tags.get("55"),
@@ -294,6 +317,7 @@ def validate_new_order_single(
         valid=True,
         msg_type="D",
         parsed=parsed,
+        decision_layer=decision_layer,
     )
 
 
