@@ -313,23 +313,75 @@ class TestCancelReplace(unittest.TestCase):
 
         self.assertFalse(r.valid)
         self.assertEqual(r.verdict, "ESCALATE")
+        self.assertEqual(r.decision_layer, "AUTHORITY")
         self.assertTrue(
             any("CONTEXT_REQUIRED" in error for error in r.errors)
         )
 
-    def test_matching_original_symbol_passes(self):
+    # #005 authority boundary:
+    # Original-order data without explicit provenance is not authoritative.
+    def test_unqualified_original_order_context_escalates(self):
         r = validate_cancel_replace(
             "8=FIX.4.2|35=G|11=ORD1_MOD|41=ORD1|55=TEST.L",
             original_order={"55": "TEST.L"},
         )
 
+        self.assertFalse(r.valid)
+        self.assertEqual(r.verdict, "ESCALATE")
+        self.assertEqual(r.decision_layer, "AUTHORITY")
+        self.assertTrue(
+            any("CONTEXT_UNAUTHORITATIVE" in error for error in r.errors)
+        )
+
+    # #005 authority boundary:
+    # Explicitly caller-asserted state must not unlock PASS/FAIL.
+    def test_caller_asserted_original_order_context_escalates(self):
+        r = validate_cancel_replace(
+            "8=FIX.4.2|35=G|11=ORD1_MOD|41=ORD1|55=TEST.L",
+            original_order={"55": "TEST.L"},
+            original_order_source="CALLER_ASSERTED",
+        )
+
+        self.assertFalse(r.valid)
+        self.assertEqual(r.verdict, "ESCALATE")
+        self.assertEqual(r.decision_layer, "AUTHORITY")
+        self.assertTrue(
+            any("CONTEXT_UNAUTHORITATIVE" in error for error in r.errors)
+        )
+
+    # #005 fail-closed protection:
+    # Unknown provenance must not accidentally become trusted state.
+    def test_unknown_original_order_source_escalates(self):
+        r = validate_cancel_replace(
+            "8=FIX.4.2|35=G|11=ORD1_MOD|41=ORD1|55=TEST.L",
+            original_order={"55": "TEST.L"},
+            original_order_source="UNKNOWN",
+        )
+
+        self.assertFalse(r.valid)
+        self.assertEqual(r.verdict, "ESCALATE")
+        self.assertEqual(r.decision_layer, "AUTHORITY")
+        self.assertTrue(
+            any("CONTEXT_UNAUTHORITATIVE" in error for error in r.errors)
+        )
+
+    # #005 authority boundary:
+    # Only explicitly authoritative state may unlock comparison.
+    def test_authoritative_matching_original_symbol_passes(self):
+        r = validate_cancel_replace(
+            "8=FIX.4.2|35=G|11=ORD1_MOD|41=ORD1|55=TEST.L",
+            original_order={"55": "TEST.L"},
+            original_order_source="AUTHORITATIVE",
+        )
+
         self.assertTrue(r.valid)
         self.assertEqual(r.verdict, "PASS")
 
-    def test_symbol_mismatch_fails(self):
+    def test_authoritative_symbol_mismatch_fails(self):
         r = validate_cancel_replace(
             "8=FIX.4.2|35=G|11=ORD1_MOD|41=ORD1|55=DIFF.L",
             original_order={"55": "TEST.L"},
+            original_order_source="AUTHORITATIVE",
         )
 
         self.assertFalse(r.valid)
