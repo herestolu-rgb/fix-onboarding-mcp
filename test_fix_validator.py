@@ -306,7 +306,7 @@ class TestNewOrderSingle(unittest.TestCase):
 
 
 class TestCancelReplace(unittest.TestCase):
-    def test_missing_original_order_context_escalates(self):
+    def test_missing_order_state_resolver_escalates(self):
         r = validate_cancel_replace(
             "8=FIX.4.2|35=G|11=ORD1_MOD|41=ORD1|55=DIFF.L"
         )
@@ -315,99 +315,93 @@ class TestCancelReplace(unittest.TestCase):
         self.assertEqual(r.verdict, "ESCALATE")
         self.assertEqual(r.decision_layer, "AUTHORITY")
         self.assertTrue(
-            any("CONTEXT_REQUIRED" in error for error in r.errors)
+            any("NO_RESOLVER" in error for error in r.errors)
         )
 
-    # #005 authority boundary:
-    # Original-order data without explicit provenance is not authoritative.
-    def test_unqualified_original_order_context_escalates(self):
+    def test_resolver_matching_original_symbol_passes(self):
+        def resolve_order_state(orig_cl_ord_id):
+            self.assertEqual(orig_cl_ord_id, "ORD1")
+            return {"55": "TEST.L"}
+
         r = validate_cancel_replace(
             "8=FIX.4.2|35=G|11=ORD1_MOD|41=ORD1|55=TEST.L",
-            original_order={"55": "TEST.L"},
-        )
-
-        self.assertFalse(r.valid)
-        self.assertEqual(r.verdict, "ESCALATE")
-        self.assertEqual(r.decision_layer, "AUTHORITY")
-        self.assertTrue(
-            any("CONTEXT_UNAUTHORITATIVE" in error for error in r.errors)
-        )
-
-    # #005 authority boundary:
-    # Explicitly caller-asserted state must not unlock PASS/FAIL.
-    def test_caller_asserted_original_order_context_escalates(self):
-        r = validate_cancel_replace(
-            "8=FIX.4.2|35=G|11=ORD1_MOD|41=ORD1|55=TEST.L",
-            original_order={"55": "TEST.L"},
-            original_order_source="CALLER_ASSERTED",
-        )
-
-        self.assertFalse(r.valid)
-        self.assertEqual(r.verdict, "ESCALATE")
-        self.assertEqual(r.decision_layer, "AUTHORITY")
-        self.assertTrue(
-            any("CONTEXT_UNAUTHORITATIVE" in error for error in r.errors)
-        )
-
-    # #005 fail-closed protection:
-    # Unknown provenance must not accidentally become trusted state.
-    def test_unknown_original_order_source_escalates(self):
-        r = validate_cancel_replace(
-            "8=FIX.4.2|35=G|11=ORD1_MOD|41=ORD1|55=TEST.L",
-            original_order={"55": "TEST.L"},
-            original_order_source="UNKNOWN",
-        )
-
-        self.assertFalse(r.valid)
-        self.assertEqual(r.verdict, "ESCALATE")
-        self.assertEqual(r.decision_layer, "AUTHORITY")
-        self.assertTrue(
-            any("CONTEXT_UNAUTHORITATIVE" in error for error in r.errors)
-        )
-
-    # #005 authority boundary:
-    # Only explicitly authoritative state may unlock comparison.
-    def test_authoritative_matching_original_symbol_passes(self):
-        r = validate_cancel_replace(
-            "8=FIX.4.2|35=G|11=ORD1_MOD|41=ORD1|55=TEST.L",
-            original_order={"55": "TEST.L"},
-            original_order_source="AUTHORITATIVE",
+            resolve_order_state=resolve_order_state,
         )
 
         self.assertTrue(r.valid)
         self.assertEqual(r.verdict, "PASS")
+        self.assertEqual(r.decision_layer, "POLICY")
 
-    def test_authoritative_symbol_mismatch_fails(self):
+    def test_resolver_symbol_mismatch_fails(self):
+        def resolve_order_state(orig_cl_ord_id):
+            self.assertEqual(orig_cl_ord_id, "ORD1")
+            return {"55": "TEST.L"}
+
         r = validate_cancel_replace(
             "8=FIX.4.2|35=G|11=ORD1_MOD|41=ORD1|55=DIFF.L",
-            original_order={"55": "TEST.L"},
-            original_order_source="AUTHORITATIVE",
+            resolve_order_state=resolve_order_state,
         )
 
         self.assertFalse(r.valid)
         self.assertEqual(r.verdict, "FAIL")
+        self.assertEqual(r.decision_layer, "POLICY")
         self.assertTrue(
             any("TAG_55_MISMATCH" in error for error in r.errors)
         )
 
-    def test_missing_orig_cl_ord_id_fails(self):
+    def test_resolver_not_found_escalates(self):
+        def resolve_order_state(orig_cl_ord_id):
+            self.assertEqual(orig_cl_ord_id, "ORD1")
+            return None
+
         r = validate_cancel_replace(
-            "8=FIX.4.2|35=G|11=ORD1_MOD|55=TEST.L"
+            "8=FIX.4.2|35=G|11=ORD1_MOD|41=ORD1|55=TEST.L",
+            resolve_order_state=resolve_order_state,
+        )
+
+        self.assertFalse(r.valid)
+        self.assertEqual(r.verdict, "ESCALATE")
+        self.assertEqual(r.decision_layer, "AUTHORITY")
+        self.assertTrue(
+            any("AUTHORITY_NOT_FOUND" in error for error in r.errors)
+        )
+
+    def test_missing_orig_cl_ord_id_fails_before_resolver(self):
+        calls = []
+
+        def resolve_order_state(orig_cl_ord_id):
+            calls.append(orig_cl_ord_id)
+            return {"55": "TEST.L"}
+
+        r = validate_cancel_replace(
+            "8=FIX.4.2|35=G|11=ORD1_MOD|55=TEST.L",
+            resolve_order_state=resolve_order_state,
         )
 
         self.assertFalse(r.valid)
         self.assertEqual(r.verdict, "FAIL")
+        self.assertEqual(r.decision_layer, "PROTOCOL")
+        self.assertEqual(calls, [])
         self.assertTrue(
             any("TAG_41_MISSING" in error for error in r.errors)
         )
 
-    def test_wrong_msg_type_fails(self):
+    def test_wrong_msg_type_fails_before_resolver(self):
+        calls = []
+
+        def resolve_order_state(orig_cl_ord_id):
+            calls.append(orig_cl_ord_id)
+            return {"55": "TEST.L"}
+
         r = validate_cancel_replace(
-            "8=FIX.4.2|35=D|11=ORD1|41=OLD1|55=TEST.L"
+            "8=FIX.4.2|35=D|11=ORD1|41=OLD1|55=TEST.L",
+            resolve_order_state=resolve_order_state,
         )
 
         self.assertFalse(r.valid)
         self.assertEqual(r.verdict, "FAIL")
+        self.assertEqual(r.decision_layer, "PROTOCOL")
+        self.assertEqual(calls, [])
 
 
 class TestExecutionReport(unittest.TestCase):
