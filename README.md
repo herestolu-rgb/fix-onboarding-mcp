@@ -1,5 +1,12 @@
 # FIX Onboarding Validator - MCP Server
 
+
+## Copyright and licensing
+
+Copyright © 2026 Tolu Opemuyi. All rights reserved.
+
+No licence to use, modify, distribute or commercially exploit this software is granted, except as permitted by applicable law or GitHub's Terms of Service. Please contact the copyright holder to discuss permission or licensing.
+
 A prototype FIX onboarding validation system combining deterministic FIX
 validation, explicit contextual authority, an MCP interface, LangGraph workflow
 components, and an executable golden-set evaluation harness.
