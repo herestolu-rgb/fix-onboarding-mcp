@@ -1,4 +1,11 @@
-# FIX Onboarding Validator - MCP Server
+# FIX Angel — FIX Onboarding MCP
+
+**Working consultancy brand:** Angelova Labs  
+**Product 01:** FIX Angel  
+**Repository:** `fix-onboarding-mcp` — technical validator, MCP interface, test and prototype workflow source. The descriptive repository name does not denote a separate consultancy brand.
+
+**Brand naming note (14 November 2026):** Angelova Labs supersedes the earlier Nexus Labs working name. This is a product/consultancy naming decision, not a statement of company registration, trademark clearance, completed client delivery or production readiness. The FIX Angel Streamlit demonstration may include local, uncommitted work that is not represented by this published repository.
+
 
 
 ## Copyright and licensing
